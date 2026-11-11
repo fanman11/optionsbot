@@ -27,7 +27,7 @@ import yfinance as yf
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE")
 
-WATCHLIST = ["SPY", "QQQ", "NVDA", "TSLA", "AAPL", "AMD"]
+WATCHLIST = ["SPY", "QQQ", "IWM", "NVDA", "TSLA", "AAPL", "AMZN", "META", "MSFT", "AMD"]
 
 # --- Strict User-Defined Thresholds ---
 MIN_VOL_OI_RATIO = 25.0            # 25x volume over open interest
