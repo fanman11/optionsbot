@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-QUANTUM GEX // Cloud-Ready Telegram Alert Dispatcher & Market Monitor
--------------------------------------------------------------------
-Continuously monitors GEX levels, Zero-Gamma Flips, and Unusual Options Activity (UOA),
-dispatching real-time formatted alerts directly to your Telegram phone app in < 500ms.
-
-Cloud-Ready:
-Includes an embedded lightweight health-check server on $PORT for 100% free hosting
-on platforms like Render.com, Railway, or Fly.io.
+QUANTUM GEX // Institutional Whale Alerter (Refined Parameters)
+--------------------------------------------------------------
+Strict Institutional Filters:
+  - Minimum Volume / Open Interest: 25.0x (Extreme opening volume)
+  - Minimum Total Dollar Premium:   $5,000,000+ ($5M+ whale size)
+  - Clear Contract Cost Display:    Shows exact price per contract ($ and $ / contract)
+  - Clean Format:                   Streamlined alert card (no extra context text)
+  - Rate Limit:                     Max 1 top whale per ticker with deduplication
 """
 
 import os
@@ -27,21 +27,23 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE")
 
 WATCHLIST = ["SPY", "QQQ", "NVDA", "TSLA", "AAPL", "AMD"]
-CHECK_INTERVAL_SECONDS = 60                   # Poll interval during trading hours
-MIN_WHALE_PREMIUM = 500000.0                 # Minimum $ premium for UOA sweeps ($500k)
-MIN_VOL_OI_RATIO = 3.0                       # Minimum Volume / Open Interest multiple
+
+# --- Strict User-Defined Thresholds ---
+MIN_VOL_OI_RATIO = 25.0            # 25x volume over open interest
+MIN_WHALE_PREMIUM = 5000000.0      # $5,000,000+ minimum institutional premium
+MAX_ALERTS_PER_TICKER = 1          # Top 1 highest whale trade per ticker
+CHECK_INTERVAL_SECONDS = 180       # Scan every 3 minutes
 
 
-# Lightweight HTTP Server for Cloud Health Checks (Render / Railway)
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
-        self.wfile.write(b"QUANTUM GEX ALERTER: ACTIVE AND MONITORING")
+        self.wfile.write(b"GEX ALERTER ACTIVE")
 
     def log_message(self, format, *args):
-        return  # Silence access logs
+        return
 
 
 def run_health_server():
@@ -51,9 +53,7 @@ def run_health_server():
 
 
 def send_telegram_alert(message_html: str) -> bool:
-    """Dispatches a formatted HTML alert to Telegram via Bot API."""
     if TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        print("[!] Cannot send Telegram alert: BOT_TOKEN not configured.")
         return False
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -65,25 +65,16 @@ def send_telegram_alert(message_html: str) -> bool:
     }
 
     try:
-        response = requests.post(url, json=payload, timeout=5)
-        return response.status_code == 200
+        r = requests.post(url, json=payload, timeout=5)
+        return r.status_code == 200
     except Exception as e:
-        print(f"[!] Telegram API error: {e}")
+        print(f"[!] Telegram send error: {e}")
         return False
 
 
-def black_scholes_gamma(S, K, T, r=0.045, sigma=0.25):
-    """Calculates analytical option Gamma."""
-    if T <= 0 or sigma <= 0 or S <= 0 or K <= 0:
-        return 0.0
-    d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-    return norm.pdf(d1) / (S * sigma * np.sqrt(T))
-
-
-class GexAlerter:
+class MegaWhaleAlerter:
     def __init__(self):
-        self.seen_alerts = set()
-        self.last_regimes = {}
+        self.alerted_contracts = {}
 
     def scan_ticker(self, ticker_symbol: str):
         ticker = yf.Ticker(ticker_symbol)
@@ -96,134 +87,109 @@ class GexAlerter:
         if not expirations:
             return
 
-        all_rows = []
+        candidate_whale_trades = []
         today = pd.Timestamp.today().normalize()
 
-        for exp_str in expirations[:2]:
-            exp_date = pd.Timestamp(exp_str)
-            dte = max((exp_date - today).days, 0.5)
-            T = dte / 365.25
+        # Check near-term expirations
+        for exp_str in expirations[:3]:
+            opt_chain = ticker.option_chain(exp_str)
 
-            chain = ticker.option_chain(exp_str)
-
-            # Calls
-            for _, row in chain.calls.iterrows():
+            # 1. Process Calls
+            for _, row in opt_chain.calls.iterrows():
                 strike = float(row['strike'])
                 oi = float(row.get('openInterest', 0) or 0)
                 vol = float(row.get('volume', 0) or 0)
-                iv = float(row.get('impliedVolatility', 0) or 0)
-                last_price = float(row.get('lastPrice', 0) or 0)
+                price = float(row.get('lastPrice', 0) or 0)
 
-                if oi > 0 and iv > 0.01:
-                    gamma = black_scholes_gamma(spot, strike, T, 0.045, iv)
-                    dollar_call_gex = gamma * (spot ** 2) * 0.01 * 100 * oi
-                    all_rows.append({'strike': strike, 'call_gex': dollar_call_gex, 'put_gex': 0.0, 'net_gex': dollar_call_gex})
+                premium = vol * price * 100
+                vol_oi = vol / oi if oi > 0 else 0
 
-                premium = vol * last_price * 100
-                vol_oi = vol / oi if oi > 0 else vol
-                trade_key = f"{ticker_symbol}_C_{strike}_{exp_str}_{vol}"
+                # Strict 25x Vol/OI and $5M+ filter
+                if vol_oi >= MIN_VOL_OI_RATIO and premium >= MIN_WHALE_PREMIUM:
+                    candidate_whale_trades.append({
+                        'ticker': ticker_symbol,
+                        'spot': spot,
+                        'type': 'CALL',
+                        'strike': strike,
+                        'expiry': exp_str,
+                        'vol': vol,
+                        'oi': oi,
+                        'vol_oi': vol_oi,
+                        'price': price,
+                        'contract_cost': price * 100,
+                        'premium': premium,
+                        'contract_id': f"{ticker_symbol}_C_{strike}_{exp_str}"
+                    })
 
-                if premium >= MIN_WHALE_PREMIUM and vol_oi >= MIN_VOL_OI_RATIO and trade_key not in self.seen_alerts:
-                    self.seen_alerts.add(trade_key)
-                    self.dispatch_uoa_alert(ticker_symbol, spot, "CALL", strike, exp_str, vol, oi, vol_oi, premium)
-
-            # Puts
-            for _, row in chain.puts.iterrows():
+            # 2. Process Puts
+            for _, row in opt_chain.puts.iterrows():
                 strike = float(row['strike'])
                 oi = float(row.get('openInterest', 0) or 0)
                 vol = float(row.get('volume', 0) or 0)
-                iv = float(row.get('impliedVolatility', 0) or 0)
-                last_price = float(row.get('lastPrice', 0) or 0)
+                price = float(row.get('lastPrice', 0) or 0)
 
-                if oi > 0 and iv > 0.01:
-                    gamma = black_scholes_gamma(spot, strike, T, 0.045, iv)
-                    dollar_put_gex = -1 * gamma * (spot ** 2) * 0.01 * 100 * oi
-                    all_rows.append({'strike': strike, 'call_gex': 0.0, 'put_gex': dollar_put_gex, 'net_gex': dollar_put_gex})
+                premium = vol * price * 100
+                vol_oi = vol / oi if oi > 0 else 0
 
-                premium = vol * last_price * 100
-                vol_oi = vol / oi if oi > 0 else vol
-                trade_key = f"{ticker_symbol}_P_{strike}_{exp_str}_{vol}"
+                if vol_oi >= MIN_VOL_OI_RATIO and premium >= MIN_WHALE_PREMIUM:
+                    candidate_whale_trades.append({
+                        'ticker': ticker_symbol,
+                        'spot': spot,
+                        'type': 'PUT',
+                        'strike': strike,
+                        'expiry': exp_str,
+                        'vol': vol,
+                        'oi': oi,
+                        'vol_oi': vol_oi,
+                        'price': price,
+                        'contract_cost': price * 100,
+                        'premium': premium,
+                        'contract_id': f"{ticker_symbol}_P_{strike}_{exp_str}"
+                    })
 
-                if premium >= MIN_WHALE_PREMIUM and vol_oi >= MIN_VOL_OI_RATIO and trade_key not in self.seen_alerts:
-                    self.seen_alerts.add(trade_key)
-                    self.dispatch_uoa_alert(ticker_symbol, spot, "PUT", strike, exp_str, vol, oi, vol_oi, premium)
+        # Send ONLY the top whale trade per ticker & deduplicate
+        if candidate_whale_trades:
+            candidate_whale_trades.sort(key=lambda x: x['premium'], reverse=True)
+            dispatched = 0
+            for trade in candidate_whale_trades:
+                if dispatched >= MAX_ALERTS_PER_TICKER:
+                    break
 
-        if not all_rows:
-            return
+                cid = trade['contract_id']
+                last_vol = self.alerted_contracts.get(cid, 0)
 
-        df = pd.DataFrame(all_rows)
-        agg = df.groupby('strike').sum().reset_index()
-        call_wall = float(agg.loc[agg['call_gex'].idxmax(), 'strike'])
-        put_wall = float(agg.loc[agg['put_gex'].idxmin(), 'strike'])
+                # Only alert if new or if volume expanded by another 40%
+                if last_vol == 0 or trade['vol'] >= (last_vol * 1.4):
+                    self.alerted_contracts[cid] = trade['vol']
+                    self.dispatch_whale_alert(trade)
+                    dispatched += 1
 
-        agg['cum_gex'] = agg['net_gex'].cumsum()
-        zero_flip = spot
-        for i in range(len(agg) - 1):
-            if agg.iloc[i]['cum_gex'] <= 0 and agg.iloc[i+1]['cum_gex'] > 0:
-                zero_flip = float(agg.iloc[i]['strike'])
-                break
-
-        current_regime = "POSITIVE" if spot >= zero_flip else "NEGATIVE"
-        last_regime = self.last_regimes.get(ticker_symbol)
-
-        if last_regime and last_regime != current_regime:
-            self.dispatch_regime_flip_alert(ticker_symbol, spot, zero_flip, current_regime, call_wall, put_wall)
-        
-        self.last_regimes[ticker_symbol] = current_regime
-
-    def dispatch_uoa_alert(self, ticker, spot, opt_type, strike, expiry, vol, oi, vol_oi, premium):
-        badge = "🟢 BULLISH SWEEP" if opt_type == "CALL" else "🔴 BEARISH SWEEP"
-        emoji = "📈" if opt_type == "CALL" else "📉"
+    def dispatch_whale_alert(self, trade):
+        is_call = trade['type'] == 'CALL'
+        badge = "🟢 $5M+ BULLISH WHALE" if is_call else "🔴 $5M+ BEARISH WHALE"
 
         msg = (
-            f"<b>{emoji} UNUSUAL OPTIONS FLOW ALERT: {ticker}</b>\n"
+            f"<b>🐋 {badge}: {trade['ticker']}</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"<b>Sentiment:</b> {badge}\n"
-            f"<b>Contract:</b> <code>{ticker} ${strike:.2f} {opt_type} ({expiry})</code>\n"
-            f"<b>Spot Price:</b> ${spot:.2f}\n"
-            f"<b>Whale Premium:</b> <b>${premium / 1e6:.2f}M</b>\n"
-            f"<b>Volume:</b> {int(vol):,} vs <b>OI:</b> {int(oi):,} (<b>{vol_oi:.1f}x Vol/OI</b>)\n"
-            f"<b>Context:</b> Aggressive institutional order flow exceeding existing open positioning.\n"
+            f"<b>Contract:</b> <code>{trade['ticker']} ${trade['strike']:.2f} {trade['type']} ({trade['expiry']})</code>\n"
+            f"<b>Contract Price:</b> <b>${trade['price']:.2f}</b> (${trade['contract_cost']:,.0f} / contract)\n"
+            f"<b>Whale Premium:</b> <b>${trade['premium'] / 1e6:.2f} Million</b>\n"
+            f"<b>Volume Multiple:</b> <b>{trade['vol_oi']:.1f}x OI</b> ({int(trade['vol']):,} vol vs {int(trade['oi']):,} oi)\n"
+            f"<b>Underlying Spot:</b> ${trade['spot']:.2f}\n"
             f"━━━━━━━━━━━━━━━━━━━"
         )
-        print(f"[!] Sending UOA alert for {ticker} ${strike} {opt_type}...")
-        send_telegram_alert(msg)
-
-    def dispatch_regime_flip_alert(self, ticker, spot, flip, new_regime, call_wall, put_wall):
-        if new_regime == "NEGATIVE":
-            msg = (
-                f"<b>⚠️ ZERO GAMMA BREAKDOWN ALERT: {ticker}</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━\n"
-                f"<b>Regime:</b> 🚨 <b>NEGATIVE GAMMA (Vol Acceleration)</b>\n"
-                f"<b>Current Spot:</b> ${spot:.2f} (Breached Flip at ${flip:.2f})\n"
-                f"<b>Downside Target:</b> Put Wall at <b>${put_wall:.2f}</b>\n"
-                f"<b>Market Maker Dynamics:</b> Dealers are now net short gamma. Hedging flows will accelerate downward momentum.\n"
-                f"━━━━━━━━━━━━━━━━━━━"
-            )
-        else:
-            msg = (
-                f"<b>✅ RECLAIMED POSITIVE GAMMA: {ticker}</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━\n"
-                f"<b>Regime:</b> 🟢 <b>POSITIVE GAMMA (Volatility Dampened)</b>\n"
-                f"<b>Current Spot:</b> ${spot:.2f} (Reclaimed Flip at ${flip:.2f})\n"
-                f"<b>Upside Target:</b> Call Wall at <b>${call_wall:.2f}</b>\n"
-                f"<b>Market Maker Dynamics:</b> Mean-reverting regime restored. Volatility expected to compress toward Call Wall.\n"
-                f"━━━━━━━━━━━━━━━━━━━"
-            )
-        print(f"[!] Sending Regime Flip alert for {ticker}...")
+        print(f"[+] Alert Dispatched: {trade['ticker']} ${trade['strike']} {trade['type']} @ ${trade['price']:.2f} (${trade['premium']/1e6:.2f}M)")
         send_telegram_alert(msg)
 
     def start_monitoring(self):
-        print("=" * 60)
-        print("  QUANTUM GEX & UOA CLOUD TELEGRAM ALERTER")
-        print(f"  Watchlist: {', '.join(WATCHLIST)}")
-        print(f"  Status:    Active in Cloud Container")
-        print("=" * 60)
-
         send_telegram_alert(
-            "<b>🚀 CLOUD ALERT ENGINE ONLINE (24/7)</b>\n"
-            "Monitoring GEX Zero-Flips, Call/Put Walls, and Unusual Whale Sweeps.\n"
-            "Alerts will be delivered here in real time."
+            "<b>🎯 $5M+ MEGA-WHALE FILTER ACTIVE</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "• <b>Vol/OI Multiple:</b> &ge; 25.0x\n"
+            "• <b>Whale Premium:</b> &ge; $5.0M\n"
+            "• <b>Contract Cost:</b> Included per strike\n"
+            "• <b>Rate Limit:</b> Max 1 Top Whale per ticker\n"
+            "━━━━━━━━━━━━━━━━━━━"
         )
 
         while True:
@@ -238,10 +204,8 @@ class GexAlerter:
 
 
 if __name__ == "__main__":
-    # Start cloud health check server in background thread
     t = threading.Thread(target=run_health_server, daemon=True)
     t.start()
 
-    # Start main alerter loop
-    alerter = GexAlerter()
+    alerter = MegaWhaleAlerter()
     alerter.start_monitoring()
