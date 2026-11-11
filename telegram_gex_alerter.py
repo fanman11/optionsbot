@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-QUANTUM GEX // Institutional Whale Alerter (Refined Parameters)
---------------------------------------------------------------
+QUANTUM GEX // Institutional Whale Alerter (Sweet-Spot Price Band)
+-----------------------------------------------------------------
 Strict Institutional Filters:
   - Minimum Volume / Open Interest: 25.0x (Extreme opening volume)
   - Minimum Total Dollar Premium:   $5,000,000+ ($5M+ whale size)
-  - Clear Contract Cost Display:    Shows exact price per contract ($ and $ / contract)
+  - Contract Price Band:            $1.00 to $5.00 ($100 to $500 per contract)
+  - Clear Contract Cost Display:    Shows exact price ($ and $ / contract)
   - Clean Format:                   Streamlined alert card (no extra context text)
   - Rate Limit:                     Max 1 top whale per ticker with deduplication
 """
@@ -31,6 +32,8 @@ WATCHLIST = ["SPY", "QQQ", "NVDA", "TSLA", "AAPL", "AMD"]
 # --- Strict User-Defined Thresholds ---
 MIN_VOL_OI_RATIO = 25.0            # 25x volume over open interest
 MIN_WHALE_PREMIUM = 5000000.0      # $5,000,000+ minimum institutional premium
+MIN_CONTRACT_PRICE = 1.00          # Minimum $1.00 option price ($100 / contract)
+MAX_CONTRACT_PRICE = 5.00          # Maximum $5.00 option price ($500 / contract)
 MAX_ALERTS_PER_TICKER = 1          # Top 1 highest whale trade per ticker
 CHECK_INTERVAL_SECONDS = 180       # Scan every 3 minutes
 
@@ -88,7 +91,6 @@ class MegaWhaleAlerter:
             return
 
         candidate_whale_trades = []
-        today = pd.Timestamp.today().normalize()
 
         # Check near-term expirations
         for exp_str in expirations[:3]:
@@ -104,8 +106,12 @@ class MegaWhaleAlerter:
                 premium = vol * price * 100
                 vol_oi = vol / oi if oi > 0 else 0
 
-                # Strict 25x Vol/OI and $5M+ filter
-                if vol_oi >= MIN_VOL_OI_RATIO and premium >= MIN_WHALE_PREMIUM:
+                # Strict 25x Vol/OI, $5M+ premium, and $1.00 - $5.00 price band
+                if (
+                    vol_oi >= MIN_VOL_OI_RATIO and
+                    premium >= MIN_WHALE_PREMIUM and
+                    MIN_CONTRACT_PRICE <= price <= MAX_CONTRACT_PRICE
+                ):
                     candidate_whale_trades.append({
                         'ticker': ticker_symbol,
                         'spot': spot,
@@ -131,7 +137,12 @@ class MegaWhaleAlerter:
                 premium = vol * price * 100
                 vol_oi = vol / oi if oi > 0 else 0
 
-                if vol_oi >= MIN_VOL_OI_RATIO and premium >= MIN_WHALE_PREMIUM:
+                # Strict 25x Vol/OI, $5M+ premium, and $1.00 - $5.00 price band
+                if (
+                    vol_oi >= MIN_VOL_OI_RATIO and
+                    premium >= MIN_WHALE_PREMIUM and
+                    MIN_CONTRACT_PRICE <= price <= MAX_CONTRACT_PRICE
+                ):
                     candidate_whale_trades.append({
                         'ticker': ticker_symbol,
                         'spot': spot,
@@ -187,7 +198,7 @@ class MegaWhaleAlerter:
             "━━━━━━━━━━━━━━━━━━━\n"
             "• <b>Vol/OI Multiple:</b> &ge; 25.0x\n"
             "• <b>Whale Premium:</b> &ge; $5.0M\n"
-            "• <b>Contract Cost:</b> Included per strike\n"
+            "• <b>Contract Price Band:</b> $1.00 – $5.00 ($100 – $500/contract)\n"
             "• <b>Rate Limit:</b> Max 1 Top Whale per ticker\n"
             "━━━━━━━━━━━━━━━━━━━"
         )
