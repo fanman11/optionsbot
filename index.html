@@ -44,11 +44,11 @@
   <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
   <!-- Top Header -->
-  <header class="border-b border-dark-750 bg-dark-900/90 backdrop-blur sticky top-0 z-40">
+  <header class="border-b border-dark-750 bg-dark-900/95 backdrop-blur sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-wrap items-center justify-between gap-3 py-3 sm:py-0 sm:h-16">
+      <div class="flex items-center justify-between gap-3 py-3">
         <div class="flex items-center gap-3">
-          <div class="h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <div class="h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
             <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
@@ -56,40 +56,44 @@
           <div>
             <div class="flex items-center gap-2">
               <span class="font-extrabold tracking-tight text-lg text-white">QUANTUM<span class="text-cyan-400">GEX</span></span>
-              <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-cyan-950 text-cyan-300 border border-cyan-800">GEX &bull; UOA &bull; ALERTS</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-cyan-950 text-cyan-300 border border-cyan-800 whitespace-nowrap">GEX &bull; UOA &bull; ALERTS</span>
             </div>
             <p class="text-[11px] text-slate-400 font-mono hidden sm:block">Dealer Gamma Exposure &bull; Zero-Flip &bull; Whale Flow Tracker</p>
           </div>
         </div>
 
-        <div class="flex items-center gap-4 sm:gap-6 text-xs">
-          <div class="hidden lg:flex flex-col items-end">
+        <div class="flex items-center gap-4 text-xs shrink-0">
+          <div class="hidden md:flex flex-col items-end">
             <span class="text-slate-400 font-medium">Market Net GEX</span>
             <span id="market-net-gex" class="font-mono font-bold text-emerald-400">+$6.85B / 1%</span>
           </div>
-          <div class="hidden lg:block h-7 w-[1px] bg-dark-700"></div>
-          <div class="hidden md:flex flex-col items-end">
+          <div class="hidden md:block h-7 w-[1px] bg-dark-700"></div>
+          <div class="hidden sm:flex flex-col items-end">
             <span class="text-slate-400 font-medium">Dealer Regime</span>
-            <span id="market-regime-badge" class="font-semibold text-emerald-400 flex items-center gap-1">
+            <span id="market-regime-badge" class="font-semibold text-emerald-400 flex items-center gap-1 whitespace-nowrap">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Long Gamma (Vol Dampened)
             </span>
           </div>
-          <div class="hidden md:block h-7 w-[1px] bg-dark-700"></div>
-          <div class="flex flex-col items-end">
-            <span class="text-slate-400 font-medium">Current Time</span>
-            <span id="live-clock" class="font-mono font-semibold text-white">--</span>
-          </div>
-          <div class="h-7 w-[1px] bg-dark-700"></div>
-          <div class="flex flex-col items-end">
-            <span class="text-slate-400 font-medium">Last Updated</span>
-            <span id="last-updated-time" class="font-mono font-semibold text-cyan-300">--</span>
-          </div>
-          <button id="btn-refresh" class="p-2 rounded-lg bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-white transition border border-dark-700 flex items-center gap-1.5 text-xs">
+          <button id="btn-refresh" class="px-3 py-2 rounded-lg bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-white transition border border-dark-700 flex items-center gap-1.5 text-xs shrink-0">
             <svg id="refresh-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <span class="hidden sm:inline">Refresh</span>
+            <span>Refresh</span>
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dedicated Live Clock & Last Updated Bar -->
+    <div class="bg-dark-900/80 border-t border-dark-800 px-4 sm:px-6 lg:px-8 py-2">
+      <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-xs">
+        <div class="flex items-center gap-2 whitespace-nowrap">
+          <span class="text-slate-400 font-medium">Current Time:</span>
+          <span id="live-clock" class="font-mono font-semibold text-white">--</span>
+        </div>
+        <div class="flex items-center gap-2 whitespace-nowrap">
+          <span class="text-slate-400 font-medium">Last Updated:</span>
+          <span id="last-updated-time" class="font-mono font-semibold text-cyan-300">--</span>
         </div>
       </div>
     </div>
