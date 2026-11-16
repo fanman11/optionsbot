@@ -46,7 +46,7 @@
   <!-- Top Header -->
   <header class="border-b border-dark-750 bg-dark-900/90 backdrop-blur sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
+      <div class="flex flex-wrap items-center justify-between gap-3 py-3 sm:py-0 sm:h-16">
         <div class="flex items-center gap-3">
           <div class="h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
             <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -62,18 +62,34 @@
           </div>
         </div>
 
-        <div class="hidden md:flex items-center gap-6 text-xs">
-          <div class="flex flex-col items-end">
+        <div class="flex items-center gap-4 sm:gap-6 text-xs">
+          <div class="hidden lg:flex flex-col items-end">
             <span class="text-slate-400 font-medium">Market Net GEX</span>
             <span id="market-net-gex" class="font-mono font-bold text-emerald-400">+$6.85B / 1%</span>
           </div>
-          <div class="h-7 w-[1px] bg-dark-700"></div>
-          <div class="flex flex-col items-end">
+          <div class="hidden lg:block h-7 w-[1px] bg-dark-700"></div>
+          <div class="hidden md:flex flex-col items-end">
             <span class="text-slate-400 font-medium">Dealer Regime</span>
             <span id="market-regime-badge" class="font-semibold text-emerald-400 flex items-center gap-1">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Long Gamma (Vol Dampened)
             </span>
           </div>
+          <div class="hidden md:block h-7 w-[1px] bg-dark-700"></div>
+          <div class="flex flex-col items-end">
+            <span class="text-slate-400 font-medium">Current Time</span>
+            <span id="live-clock" class="font-mono font-semibold text-white">--</span>
+          </div>
+          <div class="h-7 w-[1px] bg-dark-700"></div>
+          <div class="flex flex-col items-end">
+            <span class="text-slate-400 font-medium">Last Updated</span>
+            <span id="last-updated-time" class="font-mono font-semibold text-cyan-300">--</span>
+          </div>
+          <button id="btn-refresh" class="p-2 rounded-lg bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-white transition border border-dark-700 flex items-center gap-1.5 text-xs">
+            <svg id="refresh-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span class="hidden sm:inline">Refresh</span>
+          </button>
         </div>
       </div>
     </div>
@@ -229,7 +245,35 @@
     let currentTicker = MARKET_TICKERS[0];
     let chartInstance = null;
 
+    function formatDateTime(date) {
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+
+    function updateClock() {
+      const clockEl = document.getElementById('live-clock');
+      if (clockEl) {
+        clockEl.textContent = formatDateTime(new Date());
+      }
+    }
+
+    function updateLastUpdated() {
+      const updatedEl = document.getElementById('last-updated-time');
+      if (updatedEl) {
+        updatedEl.textContent = formatDateTime(new Date());
+      }
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
+      updateClock();
+      updateLastUpdated();
+      setInterval(updateClock, 1000);
       renderChips();
       renderScanner();
       renderAlerts();
@@ -374,6 +418,15 @@
       document.getElementById('tab-uoa').onclick = () => switchTab('tab-uoa');
       document.getElementById('tab-analyzer').onclick = () => switchTab('tab-analyzer');
       document.getElementById('tab-simulator').onclick = () => switchTab('tab-simulator');
+
+      document.getElementById('btn-refresh').onclick = () => {
+        const icon = document.getElementById('refresh-icon');
+        icon.classList.add('animate-spin');
+        setTimeout(() => {
+          icon.classList.remove('animate-spin');
+          updateLastUpdated();
+        }, 500);
+      };
 
       const slider = document.getElementById('slider-price-move');
       slider.oninput = (e) => {
