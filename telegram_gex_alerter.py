@@ -5,6 +5,7 @@ QUANTUM GEX // Institutional Whale Alerter with Reply-Threaded Target Tracking
 Features:
   - Strict Whale Filters:      25x Vol/OI, $5M+ Premium, $1.00-$5.00 Contract Price Band
   - Distinct Visual Headers:   🚨 [NEW ENTRY] vs ✅ [TARGET HIT] vs 📊 [DAILY SCORECARD]
+  - Explicit Expiration Line:  Dedicated Expiration Date + DTE on every alert
   - Direct Reply Threading:    Target hits reply directly to the original entry message
   - Automated Daily Scorecard: Posts daily win rate and peak gains at 4:05 PM EST
 """
@@ -54,6 +55,17 @@ def run_health_server():
     port = int(os.getenv("PORT", 8080))
     server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
     server.serve_forever()
+
+
+def format_expiry(exp_str: str) -> str:
+    """Formats YYYY-MM-DD into 'Nov 20, 2026 (4 DTE)'."""
+    try:
+        exp_dt = datetime.strptime(exp_str, "%Y-%m-%d").date()
+        dte = (exp_dt - datetime.now().date()).days
+        dte_label = "0DTE Today" if dte == 0 else f"{dte} DTE"
+        return f"{exp_dt.strftime('%b %d, %Y')} ({dte_label})"
+    except Exception:
+        return exp_str
 
 
 def send_telegram_alert(message_html: str, reply_to_message_id: int = None, silent: bool = False):
@@ -161,10 +173,12 @@ class PerformanceTracker:
                 self.dispatch_milestone(t, current_price, gain, "💎 [TARGET HIT +200%+]", "Mega institutional gamma expansion.")
 
     def dispatch_milestone(self, t, current_price, gain, header_tag, advice):
+        exp_display = format_expiry(t["expiry"])
         msg = (
             f"<b>{header_tag} {t['ticker']} ${t['strike']:.0f}{t['type'][0]}</b>\n"
             f"┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
-            f"<b>Contract:</b> <code>{t['ticker']} ${t['strike']:.2f} {t['type']} ({t['expiry']})</code>\n"
+            f"<b>Contract:</b> <code>{t['ticker']} ${t['strike']:.2f} {t['type']}</code>\n"
+            f"<b>Expiration:</b> <b>{exp_display}</b>\n"
             f"<b>Entry:</b> ${t['entry_price']:.2f} &rarr; <b>Peak: ${current_price:.2f} (+{gain:.1f}%)</b>\n"
             f"┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
             f"💡 <i>{advice}</i>"
@@ -200,7 +214,7 @@ class PerformanceTracker:
                 is_win = t["max_gain_pct"] >= WIN_THRESHOLD_PCT
                 status_icon = "✅" if is_win else "❌"
                 card_rows.append(
-                    f"• {status_icon} <code>{t['ticker']} ${t['strike']:.0f}{t['type'][0]}</code>: "
+                    f"• {status_icon} <code>{t['ticker']} ${t['strike']:.0f}{t['type'][0]} ({t['expiry']})</code>: "
                     f"Peak <b>${t['max_price']:.2f}</b> (<b>{t['max_gain_pct']:+.1f}%</b>)"
                 )
 
@@ -320,18 +334,20 @@ class MegaWhaleAlerter:
     def dispatch_whale_alert(self, trade):
         is_call = trade['type'] == 'CALL'
         badge = "🟢 BULLISH WHALE" if is_call else "🔴 BEARISH WHALE"
+        exp_display = format_expiry(trade['expiry'])
 
         msg = (
             f"<b>🚨 [NEW ENTRY] {badge}: {trade['ticker']}</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"<b>Contract:</b> <code>{trade['ticker']} ${trade['strike']:.2f} {trade['type']} ({trade['expiry']})</code>\n"
+            f"<b>Contract:</b> <code>{trade['ticker']} ${trade['strike']:.2f} {trade['type']}</code>\n"
+            f"<b>Expiration:</b> <b>{exp_display}</b>\n"
             f"<b>Entry Price:</b> <b>${trade['price']:.2f}</b> (${trade['contract_cost']:,.0f} / contract)\n"
             f"<b>Whale Premium:</b> <b>${trade['premium'] / 1e6:.2f} Million</b>\n"
             f"<b>Volume Multiple:</b> <b>{trade['vol_oi']:.1f}x OI</b> ({int(trade['vol']):,} vol vs {int(trade['oi']):,} oi)\n"
             f"<b>Underlying Spot:</b> ${trade['spot']:.2f}\n"
             f"━━━━━━━━━━━━━━━━━━━"
         )
-        print(f"[+] Entry Dispatched: {trade['ticker']} ${trade['strike']} {trade['type']} @ ${trade['price']:.2f}")
+        print(f"[+] Entry Dispatched: {trade['ticker']} ${trade['strike']} {trade['type']} exp {trade['expiry']} @ ${trade['price']:.2f}")
         return send_telegram_alert(msg)
 
     def start_monitoring(self):
