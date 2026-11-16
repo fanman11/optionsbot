@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quantum GEX Terminal // Gamma Exposure & Multi-Strategy Alert Hub</title>
+  <title>Quantum GEX Terminal // 5-Second GEX Read & Alert Hub</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,10 +21,7 @@
           colors: {
             dark: {
               950: '#070A11', 900: '#0C111C', 850: '#111827', 800: '#161F30', 750: '#1E293B', 700: '#27354A', 600: '#384860',
-            },
-            call: { DEFAULT: '#10B981', light: '#34D399', dark: '#059669', bg: 'rgba(16, 185, 129, 0.12)' },
-            put: { DEFAULT: '#F43F5E', light: '#FB7185', dark: '#E11D48', bg: 'rgba(244, 63, 94, 0.12)' },
-            accent: { cyan: '#06B6D4', amber: '#F59E0B', purple: '#8B5CF6', blue: '#3B82F6', orange: '#F97316' }
+            }
           }
         }
       }
@@ -41,8 +38,6 @@
 </head>
 <body class="min-h-screen bg-dark-950 text-slate-100 flex flex-col custom-scrollbar">
 
-  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
-
   <!-- Top Header -->
   <header class="border-b border-dark-750 bg-dark-900/95 backdrop-blur sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -58,19 +53,19 @@
               <span class="font-extrabold tracking-tight text-lg text-white">QUANTUM<span class="text-cyan-400">GEX</span></span>
               <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-cyan-950 text-cyan-300 border border-cyan-800 whitespace-nowrap">GEX &bull; UOA &bull; ALERTS</span>
             </div>
-            <p class="text-[11px] text-slate-400 font-mono hidden sm:block">Dealer Gamma Exposure &bull; Zero-Flip &bull; Whale Flow Tracker</p>
+            <p class="text-[11px] text-slate-400 font-mono hidden sm:block">Dealer Gamma Exposure &bull; Zero-Flip &bull; 5-Second Read</p>
           </div>
         </div>
 
         <div class="flex items-center gap-4 text-xs shrink-0">
           <div class="hidden md:flex flex-col items-end">
             <span class="text-slate-400 font-medium">Market Net GEX</span>
-            <span id="market-net-gex" class="font-mono font-bold text-emerald-400">+$6.85B / 1%</span>
+            <span class="font-mono font-bold text-emerald-400">+$6.85B / 1%</span>
           </div>
           <div class="hidden md:block h-7 w-[1px] bg-dark-700"></div>
           <div class="hidden sm:flex flex-col items-end">
             <span class="text-slate-400 font-medium">Dealer Regime</span>
-            <span id="market-regime-badge" class="font-semibold text-emerald-400 flex items-center gap-1 whitespace-nowrap">
+            <span class="font-semibold text-emerald-400 flex items-center gap-1 whitespace-nowrap">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Long Gamma (Vol Dampened)
             </span>
           </div>
@@ -110,28 +105,14 @@
     <!-- Navigation Tabs -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-dark-800 pb-3">
       <div class="flex items-center gap-1 bg-dark-900 p-1 rounded-xl border border-dark-750 flex-wrap">
-        <button id="tab-scanner" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-2 bg-cyan-600 text-white shadow-md">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-          Market Scanner
-        </button>
+        <button id="tab-scanner" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-2 bg-cyan-600 text-white shadow-md">Market Scanner</button>
+        <button id="tab-analyzer" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-2">⚡ 5-Second Read &amp; Chart</button>
         <button id="tab-alerts" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-2">
-          <span>🔔</span>
-          <span>Trade Alert Hub</span>
+          <span>🔔 Trade Alert Hub</span>
           <span class="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-gradient-to-r from-amber-500 to-rose-500 text-white">8 STREAMS</span>
         </button>
-        <button id="tab-uoa" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-2">
-          <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-          <span>Unusual Flow</span>
-          <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">UOA</span>
-        </button>
-        <button id="tab-analyzer" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
-          Strike Deep Dive
-        </button>
-        <button id="tab-simulator" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-          Hedging Simulator
-        </button>
+        <button id="tab-uoa" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-2">Unusual Flow (UOA)</button>
+        <button id="tab-simulator" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-2">Hedging Simulator</button>
       </div>
     </div>
 
@@ -159,12 +140,82 @@
       </div>
     </div>
 
-    <!-- VIEW 2: ALERTS -->
+    <!-- VIEW 2: 5-SECOND READ & STRIKE CHART -->
+    <div id="view-analyzer" class="hidden flex-col gap-6">
+      <!-- 5-Second GEX Read Card -->
+      <div class="glass-panel p-5 rounded-2xl border border-dark-750 flex flex-col gap-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2.5">
+              <h3 id="active-ticker-title" class="font-extrabold text-white text-xl">SPY &bull; S&P 500 ETF</h3>
+              <span id="read-regime-pill" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">+GEX (CHOPPY / PINNING)</span>
+            </div>
+            <p id="read-verdict-text" class="text-xs text-slate-300 mt-1">Loading 5-second read...</p>
+          </div>
+          <div class="flex items-center gap-3 font-mono text-xs">
+            <div class="bg-dark-900 border border-dark-750 px-3 py-1.5 rounded-lg">
+              <span class="text-slate-400 block text-[10px]">PUT WALL</span>
+              <strong id="read-put-wall" class="text-rose-400">$575.00</strong>
+            </div>
+            <div class="bg-dark-900 border border-dark-750 px-3 py-1.5 rounded-lg">
+              <span class="text-slate-400 block text-[10px]">ZERO FLIP</span>
+              <strong id="read-zero-flip" class="text-cyan-300">$578.20</strong>
+            </div>
+            <div class="bg-dark-900 border border-amber-500/40 px-3 py-1.5 rounded-lg">
+              <span class="text-amber-400 block text-[10px]">SPOT</span>
+              <strong id="read-spot" class="text-white">$585.50</strong>
+            </div>
+            <div class="bg-dark-900 border border-dark-750 px-3 py-1.5 rounded-lg">
+              <span class="text-slate-400 block text-[10px]">CALL WALL</span>
+              <strong id="read-call-wall" class="text-emerald-400">$590.00</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visual Price Runway Gauge -->
+        <div class="bg-dark-900/90 border border-dark-800 rounded-xl p-4">
+          <div class="flex justify-between text-[10px] font-mono text-slate-400 mb-2">
+            <span>PUT WALL (FLOOR)</span>
+            <span>GAMMA RUNWAY</span>
+            <span>CALL WALL (CEILING / MAGNET)</span>
+          </div>
+          <div class="relative h-4 rounded-full bg-gradient-to-r from-rose-500/30 via-cyan-500/20 to-emerald-500/30 border border-dark-700">
+            <!-- Zero Flip Marker -->
+            <div id="marker-flip" class="absolute top-0 bottom-0 w-0.5 bg-cyan-400" style="left: 25%;" title="Zero Gamma Flip">
+              <span class="absolute -bottom-5 -translate-x-1/2 text-[9px] font-mono text-cyan-300 whitespace-nowrap">FLIP</span>
+            </div>
+            <!-- Spot Marker -->
+            <div id="marker-spot" class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-amber-400 border-2 border-white shadow-lg shadow-amber-400/50" style="left: 70%;" title="Current Spot">
+              <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-mono font-bold text-amber-300 whitespace-nowrap">SPOT</span>
+            </div>
+          </div>
+          <div class="h-4"></div>
+        </div>
+      </div>
+
+      <!-- Strike Chart -->
+      <div class="glass-panel p-5 rounded-2xl flex flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-dark-800 pb-3">
+          <div>
+            <h4 class="font-bold text-white text-sm">Strike-by-Strike Gamma Exposure</h4>
+            <p class="text-xs text-slate-400">Green = Call resistance/magnet &bull; Red = Put support/cascade &bull; Blue = Net GEX</p>
+          </div>
+          <div class="flex items-center gap-3 text-xs font-mono">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500"></span> Call GEX</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-rose-500"></span> Put GEX</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-1 bg-cyan-400"></span> Net GEX</span>
+          </div>
+        </div>
+        <div class="relative h-72 w-full"><canvas id="strikeGexChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- VIEW 3: ALERTS -->
     <div id="view-alerts" class="hidden flex-col gap-4">
       <div id="alerts-grid-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
     </div>
 
-    <!-- VIEW 3: UOA -->
+    <!-- VIEW 4: UOA -->
     <div id="view-uoa" class="hidden flex-col gap-4">
       <div class="glass-panel rounded-2xl overflow-hidden shadow-2xl">
         <div class="overflow-x-auto custom-scrollbar">
@@ -185,19 +236,6 @@
             <tbody id="uoa-table-body" class="divide-y divide-dark-800"></tbody>
           </table>
         </div>
-      </div>
-    </div>
-
-    <!-- VIEW 4: ANALYZER -->
-    <div id="view-analyzer" class="hidden flex-col gap-6">
-      <div class="glass-panel p-5 rounded-2xl flex flex-col gap-4">
-        <div class="flex items-center justify-between border-b border-dark-800 pb-3">
-          <div>
-            <h3 id="active-ticker-title" class="font-extrabold text-white text-lg">SPY &bull; S&P 500 ETF</h3>
-            <p class="text-xs text-slate-400">Strike-by-Strike Gamma Exposure & Magnetic Wall Positioning</p>
-          </div>
-        </div>
-        <div class="relative h-80 w-full"><canvas id="strikeGexChart"></canvas></div>
       </div>
     </div>
 
@@ -225,12 +263,12 @@
 
   <script>
     const MARKET_TICKERS = [
-      { ticker: "SPY", name: "S&P 500 ETF", spot: 585.50, netGex: 2850, zeroFlip: 578.20, callWall: 590.00, putWall: 575.00 },
-      { ticker: "QQQ", name: "Nasdaq 100 ETF", spot: 508.20, netGex: 1420, zeroFlip: 501.50, callWall: 515.00, putWall: 495.00 },
-      { ticker: "NVDA", name: "Nvidia Corp", spot: 145.80, netGex: 840, zeroFlip: 138.40, callWall: 150.00, putWall: 135.00 },
-      { ticker: "TSLA", name: "Tesla Inc", spot: 215.30, netGex: -180, zeroFlip: 218.50, callWall: 230.00, putWall: 200.00 },
-      { ticker: "AAPL", name: "Apple Inc", spot: 228.40, netGex: 620, zeroFlip: 222.10, callWall: 235.00, putWall: 220.00 },
-      { ticker: "AMD", name: "Advanced Micro Devices", spot: 142.20, netGex: -65, zeroFlip: 144.80, callWall: 155.00, putWall: 130.00 }
+      { ticker: "SPY", name: "S&P 500 ETF", spot: 585.50, netGex: 2850, zeroFlip: 578.20, callWall: 590.00, putWall: 575.00, step: 5 },
+      { ticker: "QQQ", name: "Nasdaq 100 ETF", spot: 508.20, netGex: 1420, zeroFlip: 501.50, callWall: 515.00, putWall: 495.00, step: 5 },
+      { ticker: "NVDA", name: "Nvidia Corp", spot: 145.80, netGex: 840, zeroFlip: 138.40, callWall: 150.00, putWall: 135.00, step: 2.5 },
+      { ticker: "TSLA", name: "Tesla Inc", spot: 215.30, netGex: -180, zeroFlip: 218.50, callWall: 230.00, putWall: 200.00, step: 5 },
+      { ticker: "AAPL", name: "Apple Inc", spot: 228.40, netGex: 620, zeroFlip: 222.10, callWall: 235.00, putWall: 220.00, step: 2.5 },
+      { ticker: "AMD", name: "Advanced Micro Devices", spot: 142.20, netGex: -65, zeroFlip: 144.80, callWall: 155.00, putWall: 130.00, step: 2.5 }
     ];
 
     const ALERTS = [
@@ -251,27 +289,19 @@
 
     function formatDateTime(date) {
       return date.toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        second: '2-digit'
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: 'numeric', minute: '2-digit', second: '2-digit'
       });
     }
 
     function updateClock() {
-      const clockEl = document.getElementById('live-clock');
-      if (clockEl) {
-        clockEl.textContent = formatDateTime(new Date());
-      }
+      const el = document.getElementById('live-clock');
+      if (el) el.textContent = formatDateTime(new Date());
     }
 
     function updateLastUpdated() {
-      const updatedEl = document.getElementById('last-updated-time');
-      if (updatedEl) {
-        updatedEl.textContent = formatDateTime(new Date());
-      }
+      const el = document.getElementById('last-updated-time');
+      if (el) el.textContent = formatDateTime(new Date());
     }
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -283,12 +313,12 @@
       renderAlerts();
       renderUoa();
       initChart();
+      renderFiveSecondRead(currentTicker);
       setupTabs();
     });
 
     function renderChips() {
-      const c = document.getElementById('ticker-chips-container');
-      c.innerHTML = MARKET_TICKERS.map(t => `
+      document.getElementById('ticker-chips-container').innerHTML = MARKET_TICKERS.map(t => `
         <button onclick="selectTicker('${t.ticker}')" class="px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition flex items-center gap-2 border bg-dark-900 border-dark-750 text-slate-300 hover:bg-dark-800">
           <span class="font-bold text-white">${t.ticker}</span>
           <span class="text-slate-400 text-[11px]">$${t.spot.toFixed(2)}</span>
@@ -298,8 +328,7 @@
     }
 
     function renderScanner() {
-      const tbody = document.getElementById('scanner-table-body');
-      tbody.innerHTML = MARKET_TICKERS.map(t => {
+      document.getElementById('scanner-table-body').innerHTML = MARKET_TICKERS.map(t => {
         const isPos = t.netGex >= 0;
         const dist = ((t.spot - t.zeroFlip) / t.zeroFlip) * 100;
         return `
@@ -312,15 +341,14 @@
             <td class="py-3 px-3 text-right ${dist >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${dist >= 0 ? '+' : ''}${dist.toFixed(2)}%</td>
             <td class="py-3 px-3 text-right text-emerald-400 font-semibold">$${t.callWall.toFixed(2)}</td>
             <td class="py-3 px-3 text-right text-rose-400 font-semibold">$${t.putWall.toFixed(2)}</td>
-            <td class="py-3 px-4 text-center"><button class="px-2.5 py-1 rounded bg-dark-800 hover:bg-cyan-600 text-slate-300 hover:text-white transition text-[11px] font-semibold border border-dark-700">Inspect</button></td>
+            <td class="py-3 px-4 text-center"><button class="px-2.5 py-1 rounded bg-dark-800 hover:bg-cyan-600 text-slate-300 hover:text-white transition text-[11px] font-semibold border border-dark-700">5-Sec Read</button></td>
           </tr>
         `;
       }).join('');
     }
 
     function renderAlerts() {
-      const c = document.getElementById('alerts-grid-container');
-      c.innerHTML = ALERTS.map(a => `
+      document.getElementById('alerts-grid-container').innerHTML = ALERTS.map(a => `
         <div class="glass-panel p-4 rounded-xl border border-dark-750 flex flex-col justify-between gap-3">
           <div class="flex items-center justify-between">
             <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-dark-800 text-slate-300">${a.stream}</span>
@@ -334,14 +362,13 @@
               <div><span class="text-[10px] text-slate-500 block">Target</span><strong class="text-emerald-400">${a.pt}</strong></div>
             </div>
           </div>
-          <button onclick="selectTicker('${a.ticker}')" class="w-full py-1.5 rounded bg-dark-800 hover:bg-cyan-600 text-slate-300 hover:text-white text-xs font-semibold transition border border-dark-700">Verify on GEX Chart</button>
+          <button onclick="selectTicker('${a.ticker}')" class="w-full py-1.5 rounded bg-dark-800 hover:bg-cyan-600 text-slate-300 hover:text-white text-xs font-semibold transition border border-dark-700">Verify on 5-Sec Read</button>
         </div>
       `).join('');
     }
 
     function renderUoa() {
-      const tbody = document.getElementById('uoa-table-body');
-      tbody.innerHTML = UOA_FLOW.map(u => `
+      document.getElementById('uoa-table-body').innerHTML = UOA_FLOW.map(u => `
         <tr class="hover:bg-dark-850/60 transition">
           <td class="py-2.5 px-4 text-slate-400">${u.time}</td>
           <td class="py-2.5 px-3 font-bold text-white">${u.ticker}</td>
@@ -356,21 +383,62 @@
       `).join('');
     }
 
+    function buildStrikesForTicker(t) {
+      const strikes = [], callData = [], putData = [], netData = [];
+      const minS = Math.round((t.putWall - t.step * 2) / t.step) * t.step;
+      const maxS = Math.round((t.callWall + t.step * 2) / t.step) * t.step;
+      for (let s = minS; s <= maxS; s += t.step) {
+        const cDist = Math.abs(s - t.callWall) / (t.step * 2);
+        const pDist = Math.abs(s - t.putWall) / (t.step * 2);
+        const c = Math.round(120 + 420 * Math.exp(-0.5 * cDist * cDist));
+        const p = -Math.round(100 + 400 * Math.exp(-0.5 * pDist * pDist));
+        strikes.push(`$${s}`);
+        callData.push(c);
+        putData.push(p);
+        netData.push(c + p);
+      }
+      return { strikes, callData, putData, netData };
+    }
+
+    function renderFiveSecondRead(t) {
+      document.getElementById('active-ticker-title').textContent = `${t.ticker} • ${t.name}`;
+      document.getElementById('read-put-wall').textContent = `$${t.putWall.toFixed(2)}`;
+      document.getElementById('read-zero-flip').textContent = `$${t.zeroFlip.toFixed(2)}`;
+      document.getElementById('read-spot').textContent = `$${t.spot.toFixed(2)}`;
+      document.getElementById('read-call-wall').textContent = `$${t.callWall.toFixed(2)}`;
+
+      const isPos = t.spot >= t.zeroFlip;
+      const pill = document.getElementById('read-regime-pill');
+      pill.textContent = isPos ? '+GEX (CHOPPY / PINNING)' : '-GEX (FAST / TRENDING)';
+      pill.className = isPos
+        ? 'px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800'
+        : 'px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-950 text-rose-400 border border-rose-800';
+
+      const toCallPct = (((t.callWall - t.spot) / t.spot) * 100).toFixed(2);
+      const toPutPct = (((t.spot - t.putWall) / t.spot) * 100).toFixed(2);
+      const verdict = isPos
+        ? `Spot is ABOVE Zero Flip ($${t.zeroFlip.toFixed(2)}). Dealers cushion dips—watch for a drift/pin toward the $${t.callWall.toFixed(2)} Call Wall (+${toCallPct}% away), or a squeeze if whales break above it.`
+        : `Spot is BELOW Zero Flip ($${t.zeroFlip.toFixed(2)}). Dealers are short gamma and amplify moves—watch for fast acceleration toward the $${t.putWall.toFixed(2)} Put Wall (-${toPutPct}% away).`;
+      document.getElementById('read-verdict-text').textContent = verdict;
+
+      const span = Math.max(t.callWall - t.putWall, 1);
+      const flipPos = Math.min(Math.max(((t.zeroFlip - t.putWall) / span) * 100, 4), 96);
+      const spotPos = Math.min(Math.max(((t.spot - t.putWall) / span) * 100, 4), 96);
+      document.getElementById('marker-flip').style.left = `${flipPos}%`;
+      document.getElementById('marker-spot').style.left = `${spotPos}%`;
+    }
+
     function initChart() {
       const ctx = document.getElementById('strikeGexChart').getContext('2d');
-      const strikes = [565, 570, 575, 580, 585, 590, 595, 600, 605];
-      const callData = [80, 110, 190, 260, 410, 580, 320, 210, 95];
-      const putData = [-310, -420, -520, -380, -220, -140, -80, -40, -20];
-      const netData = strikes.map((s, i) => callData[i] + putData[i]);
-
+      const d = buildStrikesForTicker(currentTicker);
       chartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: strikes.map(s => `$${s}`),
+          labels: d.strikes,
           datasets: [
-            { label: 'Call GEX', data: callData, backgroundColor: 'rgba(16, 185, 129, 0.75)', stack: 's' },
-            { label: 'Put GEX', data: putData, backgroundColor: 'rgba(244, 63, 94, 0.75)', stack: 's' },
-            { type: 'line', label: 'Net GEX', data: netData, borderColor: '#38BDF8', borderWidth: 2, tension: 0.3 }
+            { label: 'Call GEX ($M)', data: d.callData, backgroundColor: 'rgba(16, 185, 129, 0.75)', stack: 's' },
+            { label: 'Put GEX ($M)', data: d.putData, backgroundColor: 'rgba(244, 63, 94, 0.75)', stack: 's' },
+            { type: 'line', label: 'Net GEX ($M)', data: d.netData, borderColor: '#38BDF8', borderWidth: 2, tension: 0.3 }
           ]
         },
         options: {
@@ -387,20 +455,27 @@
     function selectTicker(ticker) {
       const match = MARKET_TICKERS.find(t => t.ticker === ticker);
       if (match) currentTicker = match;
-      document.getElementById('active-ticker-title').textContent = `${currentTicker.ticker} • ${currentTicker.name}`;
+      renderFiveSecondRead(currentTicker);
+      if (chartInstance) {
+        const d = buildStrikesForTicker(currentTicker);
+        chartInstance.data.labels = d.strikes;
+        chartInstance.data.datasets[0].data = d.callData;
+        chartInstance.data.datasets[1].data = d.putData;
+        chartInstance.data.datasets[2].data = d.netData;
+        chartInstance.update();
+      }
       switchTab('tab-analyzer');
     }
 
     function switchTab(tabId) {
-      const tabs = ['tab-scanner', 'tab-alerts', 'tab-uoa', 'tab-analyzer', 'tab-simulator'];
+      const tabs = ['tab-scanner', 'tab-analyzer', 'tab-alerts', 'tab-uoa', 'tab-simulator'];
       const views = {
         'tab-scanner': 'view-scanner',
+        'tab-analyzer': 'view-analyzer',
         'tab-alerts': 'view-alerts',
         'tab-uoa': 'view-uoa',
-        'tab-analyzer': 'view-analyzer',
         'tab-simulator': 'view-simulator'
       };
-
       tabs.forEach(t => {
         const btn = document.getElementById(t);
         const view = document.getElementById(views[t]);
@@ -414,13 +489,16 @@
           view.classList.remove('flex');
         }
       });
+      if (tabId === 'tab-analyzer' && chartInstance) {
+        setTimeout(() => chartInstance.resize(), 50);
+      }
     }
 
     function setupTabs() {
       document.getElementById('tab-scanner').onclick = () => switchTab('tab-scanner');
+      document.getElementById('tab-analyzer').onclick = () => switchTab('tab-analyzer');
       document.getElementById('tab-alerts').onclick = () => switchTab('tab-alerts');
       document.getElementById('tab-uoa').onclick = () => switchTab('tab-uoa');
-      document.getElementById('tab-analyzer').onclick = () => switchTab('tab-analyzer');
       document.getElementById('tab-simulator').onclick = () => switchTab('tab-simulator');
 
       document.getElementById('btn-refresh').onclick = () => {
@@ -432,13 +510,9 @@
         }, 500);
       };
 
-      const slider = document.getElementById('slider-price-move');
-      slider.oninput = (e) => {
+      document.getElementById('slider-price-move').oninput = (e) => {
         const p = parseFloat(e.target.value);
         const price = currentTicker.spot * (1 + p / 100);
         document.getElementById('sim-pct-display').textContent = `${p >= 0 ? '+' : ''}${p.toFixed(2)}% ($${price.toFixed(2)})`;
       };
     }
-  </script>
-</body>
-</html>
