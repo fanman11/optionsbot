@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-QUANTUM GEX // 0DTE Gamma Squeeze Alerter + Scheduled Check-Ins & Daily Scorecard
---------------------------------------------------------------------------------
+QUANTUM GEX // 0DTE Gamma Squeeze Alerter + Elapsed Time Milestone Tracking
+----------------------------------------------------------------------------
 """
 
 import os
@@ -30,7 +30,7 @@ MIN_WHALE_PREMIUM = 1000000.0
 MAX_CONTRACT_PRICE = 1.00
 MAX_SPREAD_PCT = 12.5
 MIN_RUNWAY_PCT = 1.0
-CHECK_INTERVAL_SECONDS = 45        # Fast 45s scan during market hours
+CHECK_INTERVAL_SECONDS = 45
 WIN_THRESHOLD_PCT = 50.0
 SILENT_TARGET_HITS = False
 
@@ -40,6 +40,14 @@ PERFORMANCE_FILE = "0dte_performance.json"
 
 def ny_now() -> datetime:
     return datetime.now(NY_TZ)
+
+
+def format_elapsed(entry_dt: datetime, hit_dt: datetime) -> str:
+    total_mins = max(int((hit_dt - entry_dt).total_seconds() // 60), 1)
+    if total_mins < 60:
+        return f"{total_mins} min" if total_mins == 1 else f"{total_mins} mins"
+    hours, mins = divmod(total_mins, 60)
+    return f"{hours}h {mins}m"
 
 
 def is_market_open(now: datetime) -> bool:
@@ -127,15 +135,19 @@ class ZeroDtePerformanceTracker:
 
     def register_alert(self, trade, message_id=None):
         cid = trade["contract_id"]
+        now = ny_now()
         if cid not in self.active_trades:
             self.active_trades[cid] = {
                 "ticker": trade["ticker"], "type": trade["type"], "strike": trade["strike"],
                 "expiry": trade["expiry"], "entry_price": trade["price"],
                 "contract_cost": trade["contract_cost"], "max_price": trade["price"],
-                "max_gain_pct": 0.0, "milestones_hit": set(), "entry_message_id": message_id
+                "max_gain_pct": 0.0, "milestones_hit": set(),
+                "milestone_times": {}, "entry_dt": now,
+                "entry_message_id": message_id
             }
 
     def update_and_check_milestones(self, ticker_symbol, opt_chain):
+        now = ny_now()
         for cid, t in list(self.active_trades.items()):
             if t["ticker"] != ticker_symbol:
                 continue
@@ -151,22 +163,28 @@ class ZeroDtePerformanceTracker:
                 t["max_gain_pct"] = ((current_price - t["entry_price"]) / t["entry_price"]) * 100
 
             gain = t["max_gain_pct"]
+            elapsed = format_elapsed(t["entry_dt"], now)
+
             if gain >= 100.0 and 100 not in t["milestones_hit"]:
                 t["milestones_hit"].add(100)
-                self.dispatch_milestone(t, current_price, gain, "✅ [0DTE TARGET +100% // 2X]", "Position doubled. Take initial capital off.")
+                t["milestone_times"]["100"] = elapsed
+                self.dispatch_milestone(t, current_price, gain, elapsed, "✅ [0DTE TARGET +100% // 2X]", "Position doubled. Take initial capital off.")
             if gain >= 250.0 and 250 not in t["milestones_hit"]:
                 t["milestones_hit"].add(250)
-                self.dispatch_milestone(t, current_price, gain, "🏆 [0DTE TARGET +250%]", "Huge gamma runner. Lock in major gains.")
+                t["milestone_times"]["250"] = elapsed
+                self.dispatch_milestone(t, current_price, gain, elapsed, "🏆 [0DTE TARGET +250%]", "Huge gamma runner. Lock in major gains.")
             if gain >= 500.0 and 500 not in t["milestones_hit"]:
                 t["milestones_hit"].add(500)
-                self.dispatch_milestone(t, current_price, gain, "💎 [0DTE TARGET +500%+]", "Nuclear gamma squeeze in play.")
+                t["milestone_times"]["500"] = elapsed
+                self.dispatch_milestone(t, current_price, gain, elapsed, "💎 [0DTE TARGET +500%+]", "Nuclear gamma squeeze in play.")
 
-    def dispatch_milestone(self, t, current_price, gain, header_tag, advice):
+    def dispatch_milestone(self, t, current_price, gain, elapsed, header_tag, advice):
         msg = (
             f"<b>{header_tag} {t['ticker']} ${t['strike']:.0f}{t['type'][0]}</b>\n"
             f"┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
             f"<b>Contract:</b> <code>{t['ticker']} ${t['strike']:.2f} {t['type']} (0DTE Today)</code>\n"
             f"<b>Entry:</b> ${t['entry_price']:.2f} &rarr; <b>Peak: ${current_price:.2f} (+{gain:.1f}%)</b>\n"
+            f"<b>Time to Target:</b> <b>{elapsed}</b>\n"
             f"┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
             f"💡 <i>{advice}</i>"
         )
@@ -220,10 +238,17 @@ class ZeroDtePerformanceTracker:
             cum_win_rate = (self.history["total_wins"] / self.history["total_alerts"]) * 100
             self.save_history()
 
-            card_rows = [
-                f"• {'✅' if t['max_gain_pct'] >= WIN_THRESHOLD_PCT else '❌'} <code>{t['ticker']} ${t['strike']:.0f}{t['type'][0]}</code>: Peak <b>${t['max_price']:.2f}</b> (<b>{t['max_gain_pct']:+.1f}%</b>)"
-                for t in sorted(all_trades, key=lambda x: x["max_gain_pct"], reverse=True)
-            ]
+            card_rows = []
+            for t in sorted(all_trades, key=lambda x: x["max_gain_pct"], reverse=True):
+                status_icon = "✅" if t["max_gain_pct"] >= WIN_THRESHOLD_PCT else "❌"
+                times = t.get("milestone_times", {})
+                speed_parts = [f"+{k}% in {times[k]}" for k in ("100", "250", "500") if k in times]
+                speed_str = f" ({', '.join(speed_parts)})" if speed_parts else ""
+                card_rows.append(
+                    f"• {status_icon} <code>{t['ticker']} ${t['strike']:.0f}{t['type'][0]}</code>: "
+                    f"Peak <b>${t['max_price']:.2f}</b> (<b>{t['max_gain_pct']:+.1f}%</b>){speed_str}"
+                )
+
             msg = (
                 f"<b>📊 [0DTE DAILY SCORECARD]</b>\n"
                 f"═══════════════════\n"
@@ -368,7 +393,7 @@ class ZeroDteLottoAlerter:
         send_telegram_alert(
             "<b>⚡ 0DTE BOT DEPLOYED</b>\n"
             "• <b>Check-ins:</b> 9:30 AM, 12:30 PM, 4:00 PM ET\n"
-            "• <b>Daily Scorecard:</b> 4:05 PM ET\n"
+            "• <b>Daily Scorecard:</b> 4:05 PM ET (includes time-to-target)\n"
             "• <b>Market-Hours Only:</b> Ignores stale after-hours prints"
         )
         while True:
