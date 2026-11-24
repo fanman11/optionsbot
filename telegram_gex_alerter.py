@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-QUANTUM GEX // Institutional Whale Alerter + Scheduled Check-Ins & Daily Scorecard
-----------------------------------------------------------------------------------
+QUANTUM GEX // Institutional Whale Alerter + Elapsed Time Milestone Tracking
+------------------------------------------------------------------------------
 """
 
 import os
@@ -31,7 +31,7 @@ MIN_CONTRACT_PRICE = 1.00
 MAX_CONTRACT_PRICE = 5.00
 MAX_SPREAD_PCT = 12.5
 MIN_RUNWAY_PCT = 1.5
-CHECK_INTERVAL_SECONDS = 60        # Faster 60s scan during market hours
+CHECK_INTERVAL_SECONDS = 60
 WIN_THRESHOLD_PCT = 40.0
 SILENT_TARGET_HITS = False
 
@@ -52,8 +52,16 @@ def ny_now() -> datetime:
     return datetime.now(NY_TZ)
 
 
+def format_elapsed(entry_dt: datetime, hit_dt: datetime) -> str:
+    total_mins = max(int((hit_dt - entry_dt).total_seconds() // 60), 1)
+    if total_mins < 60:
+        return f"{total_mins} min" if total_mins == 1 else f"{total_mins} mins"
+    hours, mins = divmod(total_mins, 60)
+    return f"{hours}h {mins}m"
+
+
 def is_market_open(now: datetime) -> bool:
-    if now.weekday() >= 5:  # Sat/Sun
+    if now.weekday() >= 5:
         return False
     mins = now.hour * 60 + now.minute
     return (9 * 60 + 30) <= mins < (16 * 60)
@@ -164,7 +172,7 @@ class PerformanceTracker:
     def __init__(self):
         self.active_trades = {}
         self.completed_today = []
-        self.sent_events = {}  # Tracks {"open": date, "midday": date, "close": date, "scorecard": date}
+        self.sent_events = {}
         self.load_history()
 
     def load_history(self):
@@ -203,7 +211,8 @@ class PerformanceTracker:
                 "runway_pct": t.get("runway_pct", 0.0),
                 "target_wall": t.get("target_wall", 0.0),
                 "alert_time": t["alert_time"],
-                "milestones_hit": sorted(list(t["milestones_hit"]))
+                "milestones_hit": sorted(list(t["milestones_hit"])),
+                "milestone_times": t.get("milestone_times", {})
             })
 
         total = self.history.get("total_alerts", 0)
@@ -216,6 +225,7 @@ class PerformanceTracker:
 
     def register_alert(self, trade, message_id=None):
         cid = trade["contract_id"]
+        now = ny_now()
         if cid not in self.active_trades:
             self.active_trades[cid] = {
                 "ticker": trade["ticker"],
@@ -231,8 +241,10 @@ class PerformanceTracker:
                 "max_price": trade["price"],
                 "max_gain_pct": 0.0,
                 "milestones_hit": set(),
+                "milestone_times": {},
+                "entry_dt": now,
                 "entry_message_id": message_id,
-                "alert_time": ny_now().strftime("%I:%M %p ET")
+                "alert_time": now.strftime("%I:%M %p ET")
             }
         elif message_id and not self.active_trades[cid].get("entry_message_id"):
             self.active_trades[cid]["entry_message_id"] = message_id
@@ -240,6 +252,7 @@ class PerformanceTracker:
 
     def update_and_check_milestones(self, ticker_symbol, opt_chain):
         updated = False
+        now = ny_now()
         for cid, t in list(self.active_trades.items()):
             if t["ticker"] != ticker_symbol:
                 continue
@@ -256,22 +269,27 @@ class PerformanceTracker:
                 updated = True
 
             gain = t["max_gain_pct"]
+            elapsed = format_elapsed(t["entry_dt"], now)
+
             if gain >= 50.0 and 50 not in t["milestones_hit"]:
                 t["milestones_hit"].add(50)
-                self.dispatch_milestone(t, current_price, gain, "✅ [TARGET HIT +50%]", "Take partial profits & move stop to breakeven.")
+                t["milestone_times"]["50"] = elapsed
+                self.dispatch_milestone(t, current_price, gain, elapsed, "✅ [TARGET HIT +50%]", "Take partial profits & move stop to breakeven.")
                 updated = True
             if gain >= 100.0 and 100 not in t["milestones_hit"]:
                 t["milestones_hit"].add(100)
-                self.dispatch_milestone(t, current_price, gain, "🏆 [TARGET HIT +100% // 2X]", "Position doubled. Lock in risk-free runner.")
+                t["milestone_times"]["100"] = elapsed
+                self.dispatch_milestone(t, current_price, gain, elapsed, "🏆 [TARGET HIT +100% // 2X]", "Position doubled. Lock in risk-free runner.")
                 updated = True
             if gain >= 200.0 and 200 not in t["milestones_hit"]:
                 t["milestones_hit"].add(200)
-                self.dispatch_milestone(t, current_price, gain, "💎 [TARGET HIT +200%+]", "Mega institutional gamma expansion.")
+                t["milestone_times"]["200"] = elapsed
+                self.dispatch_milestone(t, current_price, gain, elapsed, "💎 [TARGET HIT +200%+]", "Mega institutional gamma expansion.")
                 updated = True
         if updated:
             self.sync_live_state()
 
-    def dispatch_milestone(self, t, current_price, gain, header_tag, advice):
+    def dispatch_milestone(self, t, current_price, gain, elapsed, header_tag, advice):
         exp_display = format_expiry(t["expiry"])
         msg = (
             f"<b>{header_tag} {t['ticker']} ${t['strike']:.0f}{t['type'][0]}</b>\n"
@@ -279,20 +297,19 @@ class PerformanceTracker:
             f"<b>Contract:</b> <code>{t['ticker']} ${t['strike']:.2f} {t['type']}</code>\n"
             f"<b>Expiration:</b> <b>{exp_display}</b>\n"
             f"<b>Entry:</b> ${t['entry_price']:.2f} &rarr; <b>Peak: ${current_price:.2f} (+{gain:.1f}%)</b>\n"
+            f"<b>Time to Target:</b> <b>{elapsed}</b>\n"
             f"┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
             f"💡 <i>{advice}</i>"
         )
         send_telegram_alert(msg, reply_to_message_id=t.get("entry_message_id"), silent=SILENT_TARGET_HITS)
 
     def check_scheduled_messages(self):
-        """Sends Market Open, Mid-Day, Market Close, and Daily Scorecard in ET."""
         now = ny_now()
         if now.weekday() >= 5:
             return
         today_str = now.strftime("%Y-%m-%d")
         mins = now.hour * 60 + now.minute
 
-        # 1. Market Open Check-In (9:30 AM - 9:40 AM ET)
         if (9 * 60 + 30) <= mins <= (9 * 60 + 40) and self.sent_events.get("open") != today_str:
             self.sent_events["open"] = today_str
             self.completed_today.clear()
@@ -303,16 +320,13 @@ class PerformanceTracker:
                 f"Scanning {', '.join(WATCHLIST)} every {CHECK_INTERVAL_SECONDS}s (ET)."
             )
 
-        # 2. Mid-Day Check-In (12:30 PM - 12:40 PM ET)
         if (12 * 60 + 30) <= mins <= (12 * 60 + 40) and self.sent_events.get("midday") != today_str:
             self.sent_events["midday"] = today_str
-            active_cnt = len(self.active_trades)
             send_telegram_alert(
                 "<b>☀️ [MID-DAY CHECK-IN] Main Bot Running</b>\n"
-                f"Active alerts tracked so far today: <b>{active_cnt}</b>"
+                f"Active alerts tracked so far today: <b>{len(self.active_trades)}</b>"
             )
 
-        # 3. Market Close Check-In (4:00 PM - 4:04 PM ET)
         if (16 * 60) <= mins <= (16 * 60 + 4) and self.sent_events.get("close") != today_str:
             self.sent_events["close"] = today_str
             send_telegram_alert(
@@ -320,7 +334,6 @@ class PerformanceTracker:
                 "Scanning paused until tomorrow at 9:30 AM ET. Daily summary coming at 4:05 PM ET."
             )
 
-        # 4. Daily Summary & Win Rate Scorecard (4:05 PM - 4:25 PM ET)
         if (16 * 60 + 5) <= mins <= (16 * 60 + 25) and self.sent_events.get("scorecard") != today_str:
             self.sent_events["scorecard"] = today_str
             all_trades = list(self.active_trades.values()) + self.completed_today
@@ -349,10 +362,17 @@ class PerformanceTracker:
             self.save_history()
             self.sync_live_state()
 
-            card_rows = [
-                f"• {'✅' if t['max_gain_pct'] >= WIN_THRESHOLD_PCT else '❌'} <code>{t['ticker']} ${t['strike']:.0f}{t['type'][0]} ({t['expiry']})</code>: Peak <b>${t['max_price']:.2f}</b> (<b>{t['max_gain_pct']:+.1f}%</b>)"
-                for t in sorted(all_trades, key=lambda x: x["max_gain_pct"], reverse=True)
-            ]
+            card_rows = []
+            for t in sorted(all_trades, key=lambda x: x["max_gain_pct"], reverse=True):
+                status_icon = "✅" if t["max_gain_pct"] >= WIN_THRESHOLD_PCT else "❌"
+                times = t.get("milestone_times", {})
+                speed_parts = [f"+{k}% in {times[k]}" for k in ("50", "100", "200") if k in times]
+                speed_str = f" ({', '.join(speed_parts)})" if speed_parts else ""
+                card_rows.append(
+                    f"• {status_icon} <code>{t['ticker']} ${t['strike']:.0f}{t['type'][0]} ({t['expiry']})</code>: "
+                    f"Peak <b>${t['max_price']:.2f}</b> (<b>{t['max_gain_pct']:+.1f}%</b>){speed_str}"
+                )
+
             msg = (
                 f"<b>📊 [DAILY SCORECARD]</b>\n"
                 f"═══════════════════\n"
@@ -545,7 +565,7 @@ class MegaWhaleAlerter:
         send_telegram_alert(
             "<b>🎯 MAIN WHALE BOT DEPLOYED</b>\n"
             "• <b>Check-ins:</b> 9:30 AM, 12:30 PM, 4:00 PM ET\n"
-            "• <b>Daily Scorecard:</b> 4:05 PM ET\n"
+            "• <b>Daily Scorecard:</b> 4:05 PM ET (includes time-to-target)\n"
             "• <b>Market-Hours Only:</b> Ignores stale after-hours prints"
         )
 
