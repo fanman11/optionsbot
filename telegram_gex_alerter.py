@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-QUANTUM GEX // Institutional Whale Alerter + Elapsed Time Milestone Tracking
-------------------------------------------------------------------------------
+QUANTUM GEX // Institutional Whale Alerter (No Spread Filter + Explicit Strike Vol/OI)
+-------------------------------------------------------------------------------------
 """
 
 import os
@@ -29,7 +29,6 @@ MIN_VOL_OI_RATIO = 25.0
 MIN_WHALE_PREMIUM = 5000000.0
 MIN_CONTRACT_PRICE = 1.00
 MAX_CONTRACT_PRICE = 5.00
-MAX_SPREAD_PCT = 12.5
 MIN_RUNWAY_PCT = 1.5
 CHECK_INTERVAL_SECONDS = 60
 WIN_THRESHOLD_PCT = 40.0
@@ -207,7 +206,9 @@ class PerformanceTracker:
                 "max_price": round(t["max_price"], 2),
                 "max_gain_pct": round(t["max_gain_pct"], 1),
                 "premium": round(t["premium"], 0),
-                "spread_pct": t.get("spread_pct", 0.0),
+                "vol": int(t.get("vol", 0)),
+                "oi": int(t.get("oi", 0)),
+                "vol_oi": round(t.get("vol_oi", 0.0), 1),
                 "runway_pct": t.get("runway_pct", 0.0),
                 "target_wall": t.get("target_wall", 0.0),
                 "alert_time": t["alert_time"],
@@ -235,7 +236,9 @@ class PerformanceTracker:
                 "entry_price": trade["price"],
                 "contract_cost": trade["contract_cost"],
                 "premium": trade["premium"],
-                "spread_pct": trade["spread_pct"],
+                "vol": trade["vol"],
+                "oi": trade["oi"],
+                "vol_oi": trade["vol_oi"],
                 "runway_pct": trade["runway_pct"],
                 "target_wall": trade["target_wall"],
                 "max_price": trade["price"],
@@ -346,7 +349,7 @@ class PerformanceTracker:
                 send_telegram_alert(
                     "<b>📊 [DAILY SCORECARD]</b>\n"
                     "═══════════════════\n"
-                    "<b>Alerts Today:</b> 0 (No trades met your strict 25x / $5M+ / Open Runway rules today)\n"
+                    "<b>Alerts Today:</b> 0 (No trades met your 25x / $5M+ / Open Runway rules today)\n"
                     f"📈 <b>All-Time Win Rate:</b> <b>{cum_wr:.1f}%</b> ({wins_hist}/{total_hist})"
                 )
                 return
@@ -396,27 +399,19 @@ class MegaWhaleAlerter:
         oi = float(row.get('openInterest', 0) or 0)
         vol = float(row.get('volume', 0) or 0)
         price = float(row.get('lastPrice', 0) or 0)
-        bid = float(row.get('bid', 0) or 0)
-        ask = float(row.get('ask', 0) or 0)
 
         premium = vol * price * 100
         vol_oi = vol / oi if oi > 0 else 0
 
         if not (vol_oi >= MIN_VOL_OI_RATIO and premium >= MIN_WHALE_PREMIUM and MIN_CONTRACT_PRICE <= price <= MAX_CONTRACT_PRICE):
-            return None, None
-        if bid <= 0 or ask <= 0 or ask < bid:
-            return None, f"Filtered {ticker_symbol} ${strike:.0f}{opt_type[0]}: Bid/Ask unavailable"
-        spread_pct = ((ask - bid) / ask) * 100
-        if spread_pct > MAX_SPREAD_PCT:
-            return None, f"Filtered {ticker_symbol} ${strike:.0f}{opt_type[0]}: Spread {spread_pct:.1f}% (> {MAX_SPREAD_PCT}%)"
+            return None
 
         return {
             'ticker': ticker_symbol, 'spot': spot, 'type': opt_type, 'strike': strike,
             'expiry': exp_str, 'vol': vol, 'oi': oi, 'vol_oi': vol_oi, 'price': price,
-            'bid': bid, 'ask': ask, 'spread_pct': round(spread_pct, 1),
             'contract_cost': price * 100, 'premium': premium,
             'contract_id': f"{ticker_symbol}_{opt_type[0]}_{strike}_{exp_str}"
-        }, None
+        }
 
     def scan_ticker(self, ticker_symbol: str):
         ticker = yf.Ticker(ticker_symbol)
@@ -463,11 +458,9 @@ class MegaWhaleAlerter:
                             'net_gex': gex_val
                         })
 
-                    trade, skip_reason = self.evaluate_option_row(ticker_symbol, spot, opt_type, row, exp_str)
+                    trade = self.evaluate_option_row(ticker_symbol, spot, opt_type, row, exp_str)
                     if trade:
                         candidate_whale_trades.append(trade)
-                    elif skip_reason:
-                        filtered_reasons.append(skip_reason)
 
         call_wall, put_wall, zero_flip = spot, spot, spot
         if all_gex_rows:
@@ -533,7 +526,7 @@ class MegaWhaleAlerter:
                 self.alerted_contracts[cid] = top_trade['vol']
                 msg_id = self.dispatch_whale_alert(top_trade)
                 self.tracker.register_alert(top_trade, message_id=msg_id)
-                add_scan_log(ticker_symbol, "ALERT", f"Sent ${top_trade['strike']:.0f}{top_trade['type'][0]} | Spread {top_trade['spread_pct']}% | Runway {top_trade['runway_pct']}%")
+                add_scan_log(ticker_symbol, "ALERT", f"Sent ${top_trade['strike']:.0f}{top_trade['type'][0]} | Vol {int(top_trade['vol']):,} vs OI {int(top_trade['oi']):,} | Runway {top_trade['runway_pct']}%")
         elif filtered_reasons:
             add_scan_log(ticker_symbol, "FILTERED", filtered_reasons[0])
         else:
@@ -552,10 +545,10 @@ class MegaWhaleAlerter:
             f"<b>Contract:</b> <code>{trade['ticker']} ${trade['strike']:.2f} {trade['type']}</code>\n"
             f"<b>Expiration:</b> <b>{exp_display}</b>\n"
             f"<b>Entry Price:</b> <b>${trade['price']:.2f}</b> (${trade['contract_cost']:,.0f} / contract)\n"
-            f"<b>Option Spread:</b> <b>{trade['spread_pct']}%</b> (${trade['bid']:.2f} Bid / ${trade['ask']:.2f} Ask)\n"
+            f"<b>Strike Volume:</b> <b>{int(trade['vol']):,}</b>\n"
+            f"<b>Strike Open Interest:</b> <b>{int(trade['oi']):,}</b> (<b>{trade['vol_oi']:.1f}x Vol/OI</b>)\n"
             f"<b>Runway to {wall_label}:</b> <b>{trade['runway_pct']}%</b> (Target: ${trade['target_wall']:.2f})\n"
             f"<b>Whale Premium:</b> <b>${trade['premium'] / 1e6:.2f} Million</b>\n"
-            f"<b>Volume Multiple:</b> <b>{trade['vol_oi']:.1f}x OI</b> ({int(trade['vol']):,} vol vs {int(trade['oi']):,} oi)\n"
             f"<b>Underlying Spot:</b> ${trade['spot']:.2f}\n"
             f"━━━━━━━━━━━━━━━━━━━"
         )
@@ -564,9 +557,9 @@ class MegaWhaleAlerter:
     def start_monitoring(self):
         send_telegram_alert(
             "<b>🎯 MAIN WHALE BOT DEPLOYED</b>\n"
-            "• <b>Check-ins:</b> 9:30 AM, 12:30 PM, 4:00 PM ET\n"
-            "• <b>Daily Scorecard:</b> 4:05 PM ET (includes time-to-target)\n"
-            "• <b>Market-Hours Only:</b> Ignores stale after-hours prints"
+            "• <b>Filters:</b> 25x Vol/OI &bull; $5M+ &bull; $1-$5 &bull; Strict Open Runway\n"
+            "• <b>Spread Filter:</b> Removed (shows Strike Volume &amp; OI directly)\n"
+            "• <b>Check-ins:</b> 9:30 AM, 12:30 PM, 4:00 PM ET | <b>Scorecard:</b> 4:05 PM ET"
         )
 
         while True:
