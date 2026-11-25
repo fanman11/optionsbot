@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-QUANTUM GEX // 0DTE Gamma Squeeze Alerter + Elapsed Time Milestone Tracking
-----------------------------------------------------------------------------
+QUANTUM GEX // 0DTE Gamma Squeeze Alerter (No Spread Filter + Explicit Strike Vol/OI)
+-------------------------------------------------------------------------------------
 """
 
 import os
@@ -28,7 +28,6 @@ WATCHLIST = ["SPY", "QQQ", "IWM", "NVDA", "TSLA", "AMD", "META"]
 MIN_VOL_OI_RATIO = 40.0
 MIN_WHALE_PREMIUM = 1000000.0
 MAX_CONTRACT_PRICE = 1.00
-MAX_SPREAD_PCT = 12.5
 MIN_RUNWAY_PCT = 1.0
 CHECK_INTERVAL_SECONDS = 45
 WIN_THRESHOLD_PCT = 50.0
@@ -297,8 +296,6 @@ class ZeroDteLottoAlerter:
                 vol = float(row.get('volume', 0) or 0)
                 iv = float(row.get('impliedVolatility', 0) or 0)
                 price = float(row.get('lastPrice', 0) or 0)
-                bid = float(row.get('bid', 0) or 0)
-                ask = float(row.get('ask', 0) or 0)
 
                 if oi > 0 and iv > 0.01:
                     gamma = black_scholes_gamma(spot, strike, T, 0.045, iv)
@@ -315,17 +312,11 @@ class ZeroDteLottoAlerter:
                 vol_oi = vol / oi if oi > 0 else 0
                 if not (vol_oi >= MIN_VOL_OI_RATIO and premium >= MIN_WHALE_PREMIUM and 0.05 <= price <= MAX_CONTRACT_PRICE):
                     continue
-                if bid <= 0 or ask <= 0 or ask < bid:
-                    continue
-                spread_pct = ((ask - bid) / ask) * 100
-                if spread_pct > MAX_SPREAD_PCT:
-                    continue
 
                 candidates.append({
                     'ticker': ticker_symbol, 'spot': spot, 'type': opt_type,
                     'strike': strike, 'expiry': exp_str, 'vol': vol, 'oi': oi,
-                    'vol_oi': vol_oi, 'price': price, 'bid': bid, 'ask': ask,
-                    'spread_pct': round(spread_pct, 1), 'contract_cost': price * 100,
+                    'vol_oi': vol_oi, 'price': price, 'contract_cost': price * 100,
                     'premium': premium, 'contract_id': f"{ticker_symbol}_0DTE_{opt_type[0]}_{strike}_{exp_str}"
                 })
 
@@ -380,10 +371,10 @@ class ZeroDteLottoAlerter:
             f"<b>Contract:</b> <code>{trade['ticker']} ${trade['strike']:.2f} {trade['type']}</code>\n"
             f"<b>Expiration:</b> <b>{trade['expiry']} (0DTE Today)</b>\n"
             f"<b>Entry Price:</b> <b>${trade['price']:.2f}</b> (${trade['contract_cost']:,.0f} / contract)\n"
-            f"<b>Option Spread:</b> <b>{trade['spread_pct']}%</b> (${trade['bid']:.2f} Bid / ${trade['ask']:.2f} Ask)\n"
+            f"<b>Strike Volume:</b> <b>{int(trade['vol']):,}</b>\n"
+            f"<b>Strike Open Interest:</b> <b>{int(trade['oi']):,}</b> (<b>{trade['vol_oi']:.1f}x Vol/OI</b>)\n"
             f"<b>Runway to {wall_label}:</b> <b>{trade['runway_pct']}%</b> (Target: ${trade['target_wall']:.2f})\n"
-            f"<b>Whale Outlay:</b> <b>${trade['premium'] / 1e6:.2f} Million</b> ({int(trade['vol']):,} contracts)\n"
-            f"<b>Volume Multiple:</b> <b>{trade['vol_oi']:.1f}x OI</b>\n"
+            f"<b>Whale Outlay:</b> <b>${trade['premium'] / 1e6:.2f} Million</b>\n"
             f"<b>Underlying Spot:</b> ${trade['spot']:.2f}\n"
             f"━━━━━━━━━━━━━━━━━━━"
         )
@@ -392,9 +383,9 @@ class ZeroDteLottoAlerter:
     def start_monitoring(self):
         send_telegram_alert(
             "<b>⚡ 0DTE BOT DEPLOYED</b>\n"
-            "• <b>Check-ins:</b> 9:30 AM, 12:30 PM, 4:00 PM ET\n"
-            "• <b>Daily Scorecard:</b> 4:05 PM ET (includes time-to-target)\n"
-            "• <b>Market-Hours Only:</b> Ignores stale after-hours prints"
+            "• <b>Filters:</b> 0DTE &bull; 40x Vol/OI &bull; $1M+ &bull; &le; $1.00 &bull; Strict Open Runway\n"
+            "• <b>Spread Filter:</b> Removed (shows Strike Volume &amp; OI directly)\n"
+            "• <b>Check-ins:</b> 9:30 AM, 12:30 PM, 4:00 PM ET | <b>Scorecard:</b> 4:05 PM ET"
         )
         while True:
             now = ny_now()
